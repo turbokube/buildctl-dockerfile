@@ -1,4 +1,4 @@
-module github.com/turbokube/contain/scripts
+module github.com/turbokube/buildctl-npm/scripts
 
 go 1.20
 

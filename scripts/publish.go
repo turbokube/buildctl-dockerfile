@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,13 +21,13 @@ import (
 )
 
 const (
-	owner = "turbokube"
-	repo  = "contain"
+	owner = "moby"
+	repo  = "buildkit"
 )
 
 var (
-	publishVersion    = "0.5.5"
-	releaseBinaryName = regexp.MustCompile(`^contain-v(?P<version>\d+\.\d+\.\d+)-(?P<os>[a-z0-9]+)-(?P<arch>[a-z0-9]+)(?P<ext>\.exe)?(?P<checksum>\.[a-z0-9]+)?$`)
+	publishVersion    = "0.22.0"
+	releaseBinaryName = regexp.MustCompile(`^buildkit-v(?P<version>\d+\.\d+\.\d+)\.(?P<os>[a-z0-9]+)-(?P<arch>[a-z0-9\-]+)\.tar\.gz$`)
 )
 
 type OS int
@@ -60,6 +62,10 @@ const (
 	Win32  OS  = 3
 	X64    CPU = 1
 	Arm64  CPU = 2
+	ArmV7  CPU = 3
+	Ppc64le CPU = 4
+	Riscv64 CPU = 5
+	S390x  CPU = 6
 )
 
 func (os OS) String() string {
@@ -81,6 +87,14 @@ func (c CPU) String() string {
 		return "x64"
 	case Arm64:
 		return "arm64"
+	case ArmV7:
+		return "arm"
+	case Ppc64le:
+		return "ppc64"
+	case Riscv64:
+		return "riscv64"
+	case S390x:
+		return "s390x"
 	default:
 		panic(fmt.Sprintf("cpu name %d", c))
 	}
@@ -92,6 +106,14 @@ func NewCPU(arch string) CPU {
 		return X64
 	case "arm64":
 		return Arm64
+	case "arm-v7":
+		return ArmV7
+	case "ppc64le":
+		return Ppc64le
+	case "riscv64":
+		return Riscv64
+	case "s390x":
+		return S390x
 	default:
 		panic(fmt.Sprintf("arch: %s", arch))
 	}
@@ -138,7 +160,7 @@ func main() {
 	var err error
 
 	parent := ParentPackage{}
-	parentP, err := ioutil.ReadFile("package.json")
+	parentP, err := ioutil.ReadFile("../package.json")
 	if err != nil {
 		zap.L().Fatal("read package.json", zap.Error(err))
 	}
@@ -183,21 +205,21 @@ func main() {
 	}
 
 	var remainingWork = make([]string, 0)
-	npm, err := filepath.Abs("npm")
+	npm, err := filepath.Abs("../npm")
 	if err != nil {
 		zap.L().Fatal("parent dir", zap.Error(err))
 	}
 	for _, asset := range publishRelease.Assets {
 		match := releaseBinaryName.FindStringSubmatch(*asset.Name)
 		zap.L().Debug("asset", zap.String("name", *asset.Name), zap.Strings("match", match))
-		if match[5] != "" {
+		if len(match) == 0 {
 			zap.L().Debug("ignore", zap.String("name", *asset.Name))
 			continue
 		}
 		version := match[1]
 		o := NewOs(match[2])
 		cpu := NewCPU(match[3])
-		exename := "contain"
+		exename := "buildctl"
 		binname := fmt.Sprintf("%s-%s-%s", exename, o.String(), cpu.String())
 		if o.String() == "win32" {
 			exename = fmt.Sprintf("%s.exe", exename)
@@ -205,7 +227,7 @@ func main() {
 		}
 
 		p := BinPackage{
-			Name:        fmt.Sprintf("contain-%s-%s", o, cpu),
+			Name:        fmt.Sprintf("buildctl-%s-%s", o, cpu),
 			Version:     version,
 			Homepage:    parent.Homepage,
 			Description: fmt.Sprintf("Platform specific (%s-%s) binary package for %s", o, cpu, parent.Name),
@@ -238,23 +260,47 @@ func main() {
 			zap.L().Fatal("write package.json", zap.Error(err))
 		}
 		bin := path.Join(dir, p.Bin[binname])
-		out, err := os.Create(bin)
-		if err != nil {
-			zap.L().Fatal("create download target", zap.String("path", bin), zap.Error(err))
-		}
-		defer out.Close()
 		url := asset.GetBrowserDownloadURL()
 		download, err := http.Get(url)
 		if err != nil {
 			zap.L().Fatal("download", zap.String("url", url), zap.Error(err))
 		}
 		defer download.Body.Close()
-		n, err := io.Copy(out, download.Body)
+
+		// Extract buildctl from tar.gz
+		gzipReader, err := gzip.NewReader(download.Body)
 		if err != nil {
-			zap.L().Fatal("download body", zap.String("url", url), zap.String("to", bin), zap.Error(err))
+			zap.L().Fatal("gzip reader", zap.Error(err))
 		}
-		if err := out.Chmod(0755); err != nil {
-			zap.L().Fatal("bin chmod", zap.Error(err))
+		defer gzipReader.Close()
+
+		tarReader := tar.NewReader(gzipReader)
+		var n int64
+		for {
+			header, err := tarReader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				zap.L().Fatal("tar next", zap.Error(err))
+			}
+
+			// Look for buildctl binary
+			if strings.HasSuffix(header.Name, "/buildctl") || header.Name == "buildctl" {
+				out, err := os.Create(bin)
+				if err != nil {
+					zap.L().Fatal("create binary", zap.String("path", bin), zap.Error(err))
+				}
+				n, err = io.Copy(out, tarReader)
+				out.Close()
+				if err != nil {
+					zap.L().Fatal("extract binary", zap.Error(err))
+				}
+				if err := os.Chmod(bin, 0755); err != nil {
+					zap.L().Fatal("bin chmod", zap.Error(err))
+				}
+				break
+			}
 		}
 		zap.L().Info("generated package", zap.String("at", dir), zap.Int64("binSize", n))
 		remainingWork = append(remainingWork, fmt.Sprintf("(cd npm/%s; npm publish --access public)", p.Name))
@@ -264,7 +310,7 @@ func main() {
 }
 
 func releaseFromTag(ctx context.Context, client *github.Client, repository *github.Repository, tag *github.RepositoryTag) (*github.RepositoryRelease, error) {
-	// or "Create release" from the ...-button at https://github.com/turbokube/contain/tags
+	// or "Create release" from the ...-button at https://github.com/moby/buildkit/tags
 	zap.L().Fatal("TODO publish manually", zap.String("at", *repository.TagsURL))
 	return nil, nil
 }
