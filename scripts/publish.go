@@ -220,10 +220,8 @@ func main() {
 		o := NewOs(match[2])
 		cpu := NewCPU(match[3])
 		exename := "buildctl"
-		binname := fmt.Sprintf("%s-%s-%s", exename, o.String(), cpu.String())
 		if o.String() == "win32" {
 			exename = fmt.Sprintf("%s.exe", exename)
-			binname = fmt.Sprintf("%s.exe", binname)
 		}
 
 		p := BinPackage{
@@ -232,7 +230,7 @@ func main() {
 			Homepage:    parent.Homepage,
 			Description: fmt.Sprintf("Platform specific (%s-%s) binary package for %s", o, cpu, parent.Name),
 			Bin: map[string]string{
-				binname: fmt.Sprintf("bin/%s", exename),
+				"buildctl": fmt.Sprintf("bin/%s", exename),
 			},
 			Licence: parent.Licence,
 			Os:      []OS{o},
@@ -259,7 +257,7 @@ func main() {
 		if err := ioutil.WriteFile(path.Join(dir, "package.json"), j, 0644); err != nil {
 			zap.L().Fatal("write package.json", zap.Error(err))
 		}
-		bin := path.Join(dir, p.Bin[binname])
+		bin := path.Join(dir, p.Bin["buildctl"])
 		url := asset.GetBrowserDownloadURL()
 		download, err := http.Get(url)
 		if err != nil {
