@@ -285,8 +285,12 @@ func main() {
 				zap.L().Fatal("tar next", zap.Error(err))
 			}
 
-			// Look for buildctl binary
-			if strings.HasSuffix(header.Name, "/buildctl") || header.Name == "buildctl" {
+			// Look for buildctl binary (handles both Unix and Windows naming)
+			targetBinary := "buildctl"
+			if o.String() == "win32" {
+				targetBinary = "buildctl.exe"
+			}
+			if strings.HasSuffix(header.Name, "/"+targetBinary) || header.Name == targetBinary {
 				out, err := os.Create(bin)
 				if err != nil {
 					zap.L().Fatal("create binary", zap.String("path", bin), zap.Error(err))
