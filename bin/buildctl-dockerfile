@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 const { platform, arch } = process;
+const fs = require('fs');
+const path = require('path');
 
-// this script inentionally does not depend on the postinstall script, so it can act as fallback
+// this script intentionally does not depend on the postinstall script, so it can act as fallback
 
 const PLATFORMS = {
   win32: {
@@ -28,21 +30,229 @@ if (!binPath) {
     "The buildctl CLI package doesn't ship with prebuilt binaries for your platform",
     platform, arch
   );
-  process.exitCode = 1;
+  process.exit(1);
 }
 
-if (process.argv[0].endsWith("node")) process.argv = process.argv.slice(1);
-if (process.argv[0].endsWith("buildctl-dockerfile")
-    || process.argv[0].endsWith("buildctl-d")
-    || process.argv[1] === "dockerfile"
-    || process.argv[1] === "d") {
-  console.error('The "dockerfile" subcommand is TODO. Passing through to "buildctl".');
+function showHelp() {
+  console.log(`
+buildctl-dockerfile - Simplified Docker-style interface for buildctl
+
+USAGE:
+  buildctl-dockerfile [OPTIONS] CONTEXT
+
+OPTIONS:
+  -f, --file DOCKERFILE    Path to the Dockerfile (default: Dockerfile in context)
+  --build-arg KEY=VALUE    Set build arguments (can be used multiple times)
+  -t, --tag IMAGE          Name and optionally tag for the built image
+  --dry-run                Print the buildctl command that would be executed
+  -h, --help               Show this help message
+
+EXAMPLES:
+  # Build with default Dockerfile in current directory
+  buildctl-dockerfile .
+
+  # Build with custom Dockerfile
+  buildctl-dockerfile -f custom.Dockerfile .
+
+  # Build with build arguments
+  buildctl-dockerfile --build-arg NODE_VERSION=18 --build-arg ENV=production .
+
+  # Build and tag the image
+  buildctl-dockerfile -t myapp:latest .
+
+  # Dry run to see the buildctl command
+  buildctl-dockerfile --dry-run .
+
+  # Combine options
+  buildctl-dockerfile -f docker/Dockerfile -t myapp:v1.0 --build-arg VERSION=1.0 ./src
+
+This command translates familiar docker build options into buildctl build syntax.
+`);
+}
+
+function parseArgs(args) {
+  const options = {
+    dockerfile: null,
+    buildArgs: [],
+    tag: null,
+    context: null,
+    help: false,
+    dryRun: false
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '-h' || arg === '--help') {
+      options.help = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
+    } else if (arg === '-f' || arg === '--file') {
+      if (i + 1 >= args.length) {
+        throw new Error(`Option ${arg} requires a value`);
+      }
+      options.dockerfile = args[++i];
+    } else if (arg === '--build-arg') {
+      if (i + 1 >= args.length) {
+        throw new Error(`Option ${arg} requires a value`);
+      }
+      options.buildArgs.push(args[++i]);
+    } else if (arg === '-t' || arg === '--tag') {
+      if (i + 1 >= args.length) {
+        throw new Error(`Option ${arg} requires a value`);
+      }
+      options.tag = args[++i];
+    } else if (!arg.startsWith('-')) {
+      if (options.context) {
+        throw new Error(`Multiple context paths specified: ${options.context} and ${arg}`);
+      }
+      options.context = arg;
+    } else {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+  }
+
+  return options;
+}
+
+function validateDockerfile(contextPath, dockerfilePath) {
+  let fullDockerfilePath;
+  
+  if (dockerfilePath) {
+    // Custom dockerfile path - can be relative to cwd or absolute
+    if (path.isAbsolute(dockerfilePath)) {
+      fullDockerfilePath = dockerfilePath;
+    } else {
+      fullDockerfilePath = path.resolve(dockerfilePath);
+    }
+  } else {
+    // Default dockerfile in context
+    fullDockerfilePath = path.resolve(contextPath, 'Dockerfile');
+  }
+
+  if (!fs.existsSync(fullDockerfilePath)) {
+    throw new Error(`Dockerfile not found: ${fullDockerfilePath}`);
+  }
+
+  return fullDockerfilePath;
+}
+
+function buildBuildctlArgs(options) {
+  const contextPath = path.resolve(options.context);
+  const dockerfilePath = validateDockerfile(options.context, options.dockerfile);
+  const dockerfileDir = path.dirname(dockerfilePath);
+  
+  const args = [
+    'build',
+    '--frontend', 'dockerfile.v0',
+    '--local', `context=${contextPath}`,
+    '--local', `dockerfile=${dockerfileDir}`
+  ];
+
+  // Add dockerfile filename if it's not the default
+  const dockerfileName = path.basename(dockerfilePath);
+  if (dockerfileName !== 'Dockerfile') {
+    args.push('--opt', `filename=${dockerfileName}`);
+  }
+
+  // Add build arguments
+  for (const buildArg of options.buildArgs) {
+    if (!buildArg.includes('=')) {
+      throw new Error(`Invalid build-arg format: ${buildArg}. Expected KEY=VALUE`);
+    }
+    args.push('--opt', `build-arg:${buildArg}`);
+  }
+
+  // Add output (tag)
+  if (options.tag) {
+    args.push('--output', `type=image,name=${options.tag},push=false`);
+  } else {
+    // Default to docker output if no tag specified
+    args.push('--output', 'type=docker');
+  }
+
+  return args;
+}
+
+// Parse command line arguments
+let options;
+try {
+  // Remove node and script name from argv
+  let argv = process.argv.slice(2);
+  
+  // Handle case where this script is invoked as a subcommand
+  if (argv[0] === 'dockerfile' || argv[0] === 'd') {
+    argv = argv.slice(1);
+  }
+  
+  options = parseArgs(argv);
+} catch (error) {
+  console.error(`Error: ${error.message}`);
+  showHelp();
+  process.exit(1);
+}
+
+// Show help if requested
+if (options.help) {
+  showHelp();
+  process.exit(0);
+}
+
+// Validate required arguments
+if (!options.context) {
+  console.error('Error: Context path is required');
+  showHelp();
+  process.exit(1);
+}
+
+// Validate context path exists
+if (!fs.existsSync(options.context)) {
+  console.error(`Error: Context path does not exist: ${options.context}`);
+  process.exit(1);
+}
+
+// Check if it's actually the dockerfile subcommand
+const scriptName = path.basename(process.argv[1] || '');
+const isDockerfileCommand = scriptName.includes('dockerfile') || 
+                           scriptName.includes('buildctl-d') ||
+                           process.argv.slice(2).includes('dockerfile') ||
+                           process.argv.slice(2).includes('d');
+
+if (!isDockerfileCommand) {
+  // Pass through to regular buildctl
+  const result = require("child_process").spawnSync(
+    require.resolve(binPath),
+    process.argv.slice(2),
+    { shell: false, stdio: "inherit" },
+  );
+  if (result.error) throw result.error;
+  process.exit(result.status);
+}
+
+// Build buildctl arguments
+let buildctlArgs;
+try {
+  buildctlArgs = buildBuildctlArgs(options);
+} catch (error) {
+  console.error(`Error: ${error.message}`);
+  process.exit(1);
+}
+
+// Execute buildctl with constructed arguments
+if (options.dryRun) {
+  console.log('buildctl ' + buildctlArgs.join(' '));
+  process.exit(0);
 }
 
 const result = require("child_process").spawnSync(
   require.resolve(binPath),
-  process.argv.slice(2),
+  buildctlArgs,
   { shell: false, stdio: "inherit" },
 );
-if (result.error) throw result.error;
-process.exitCode = result.status;
+
+if (result.error) {
+  console.error(`Failed to execute buildctl: ${result.error.message}`);
+  process.exit(1);
+}
+
+process.exit(result.status || 0);

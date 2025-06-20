@@ -24,6 +24,44 @@ After installation, the `buildctl` command will be available:
 buildctl --help
 ```
 
+### buildctl-dockerfile Command
+
+This package also provides a `buildctl-dockerfile` command (aliased as `buildctl-d`) that offers a simplified interface similar to `docker build` for common Dockerfile-based builds:
+
+```bash
+buildctl-dockerfile [OPTIONS] CONTEXT
+```
+
+**Options:**
+- `-f, --file DOCKERFILE` - Path to the Dockerfile (default: `Dockerfile` in context)
+- `--build-arg KEY=VALUE` - Set build arguments
+- `-t, --tag IMAGE` - Name and optionally tag for the built image
+- `--dry-run` - Print the buildctl command that would be executed
+
+**Examples:**
+
+```bash
+# Build with default Dockerfile in current directory
+buildctl-dockerfile .
+
+# Build with custom Dockerfile
+buildctl-dockerfile -f custom.Dockerfile .
+
+# Build with build arguments
+buildctl-dockerfile --build-arg NODE_VERSION=18 --build-arg ENV=production .
+
+# Build and tag the image
+buildctl-dockerfile -t myapp:latest .
+
+# See what buildctl command would be executed (dry run)
+buildctl-dockerfile --dry-run .
+
+# Combine options
+buildctl-dockerfile -f docker/Dockerfile -t myapp:v1.0 --build-arg VERSION=1.0 ./src
+```
+
+The command translates these familiar options into the appropriate `buildctl build` syntax with the dockerfile frontend.
+
 ## Supported Platforms
 
 This package automatically installs the correct binary for your platform:
