@@ -1,6 +1,6 @@
 {
   "name": "buildctl",
-  "version": "0.22.0-1",
+  "version": "0.22.0-2",
   "description": "CLI for BuildKit, a toolkit for converting source code to build artifacts",
   "homepage": "https://github.com/moby/buildkit",
   "repository": {
@@ -9,10 +9,11 @@
   },
   "license": "Apache-2.0",
   "bin": {
-    "buildctl": "bin/buildctl-build"
+    "buildctl-dockerfile": "bin/buildctl-dockerfile",
+    "buildctl-d": "bin/buildctl-dockerfile"
   },
   "scripts": {
-    "postinstall": "node bin/postinstall.js"
+    "postinstall": "node scripts/postinstall.js"
   },
   "files": [
     "bin/",

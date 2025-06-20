@@ -31,8 +31,11 @@ if (!binPath) {
   process.exitCode = 1;
 }
 
-if (process.argv[1] === "build") {
-  console.error('The "build" subcommand is TODO. Passing through to "buildctl".');
+if (process.argv[0].endsWith("buildctl-dockerfile")
+    || process.argv[0].endsWith("buildctl-d")
+    || process.argv[1] === "dockerfile"
+    || process.argv[1] === "d") {
+  console.error('The "dockerfile" subcommand is TODO. Passing through to "buildctl".');
 }
 
 const result = require("child_process").spawnSync(
