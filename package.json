@@ -13,11 +13,14 @@
     "buildctl-d": "bin/buildctl-dockerfile"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "test": "./test-dockerfile.sh"
   },
   "files": [
     "bin/",
-    "scripts/postinstall.js"
+    "scripts/postinstall.js",
+    "test-dockerfile.sh",
+    "TESTS.md"
   ],
   "keywords": [
     "buildkit",

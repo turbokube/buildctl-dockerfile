@@ -85,3 +85,13 @@ Package versions correspond to BuildKit releases. For example, version `0.22.0` 
 This package is licensed under Apache-2.0, same as BuildKit.
 
 The buildctl binary is built and distributed by the BuildKit project: https://github.com/moby/buildkit
+
+## Testing
+
+To run the regression test suite for the `buildctl-dockerfile` command:
+
+```bash
+./test-dockerfile.sh
+```
+
+See `TESTS.md` for detailed test documentation and manual test cases.
