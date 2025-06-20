@@ -1,0 +1,44 @@
+#!/usr/bin/env node
+const { platform, arch } = process;
+
+// this script inentionally does not depend on the postinstall script, so it can act as fallback
+
+const PLATFORMS = {
+  win32: {
+    x64: "buildctl-win32-x64/bin/buildctl.exe",
+    arm64: "buildctl-win32-arm64/bin/buildctl.exe",
+  },
+  darwin: {
+    x64: "buildctl-darwin-x64/bin/buildctl",
+    arm64: "buildctl-darwin-arm64/bin/buildctl",
+  },
+  linux: {
+    x64: "buildctl-linux-x64/bin/buildctl",
+    arm64: "buildctl-linux-arm64/bin/buildctl",
+    arm: "buildctl-linux-arm/bin/buildctl",
+    ppc64: "buildctl-linux-ppc64le/bin/buildctl",
+    riscv64: "buildctl-linux-riscv64/bin/buildctl",
+    s390x: "buildctl-linux-s390x/bin/buildctl",
+  },
+};
+
+const binPath = PLATFORMS?.[platform]?.[arch];
+if (!binPath) {
+  console.error(
+    "The buildctl CLI package doesn't ship with prebuilt binaries for your platform",
+    platform, arch
+  );
+  process.exitCode = 1;
+}
+
+if (process.argv[1] === "build") {
+  console.error('The "build" subcommand is TODO. Passing through to "buildctl".');
+}
+
+const result = require("child_process").spawnSync(
+  require.resolve(binPath),
+  process.argv.slice(2),
+  { shell: false, stdio: "inherit" },
+);
+if (result.error) throw result.error;
+process.exitCode = result.status;
