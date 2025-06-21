@@ -44,6 +44,7 @@ OPTIONS:
   -f, --file DOCKERFILE    Path to the Dockerfile (default: Dockerfile in context)
   --build-arg KEY=VALUE    Set build arguments (can be used multiple times)
   -t, --tag IMAGE          Name and optionally tag for the built image
+  --push                   Push the image to registry (requires -t/--tag or --output in passthrough)
   --dry-run                Print the buildctl command that would be executed
   -h, --help               Show this help message
   --                       Pass remaining arguments directly to buildctl
@@ -61,6 +62,9 @@ EXAMPLES:
   # Build and tag the image
   buildctl-dockerfile -t myapp:latest .
 
+  # Build, tag and push the image
+  buildctl-dockerfile -t myregistry.com/myapp:latest --push .
+
   # Dry run to see the buildctl command
   buildctl-dockerfile --dry-run .
 
@@ -72,6 +76,9 @@ EXAMPLES:
 
   # Override output with passthrough arguments
   buildctl-dockerfile . -- --output type=registry,name=myregistry.com/image:latest,push=true
+
+  # Merge push with passthrough output
+  buildctl-dockerfile --push . -- --output type=registry,name=myregistry.com/image:latest
 
 This command translates familiar docker build options into buildctl build syntax.
 `);
@@ -85,6 +92,7 @@ function parseArgs(args) {
     context: null,
     help: false,
     dryRun: false,
+    push: false,
     passthroughArgs: []
   };
 
@@ -104,6 +112,8 @@ function parseArgs(args) {
       options.help = true;
     } else if (arg === '--dry-run') {
       options.dryRun = true;
+    } else if (arg === '--push') {
+      options.push = true;
     } else if (arg === '-f' || arg === '--file') {
       if (i + 1 >= mainArgs.length) {
         throw new Error(`Option ${arg} requires a value`);
@@ -185,19 +195,84 @@ function buildBuildctlArgs(options) {
     arg === '--output' || arg.startsWith('--output=')
   );
 
+  // Validation logic for conflicting options
+  if (options.push && !options.tag && !hasOutputInPassthrough) {
+    throw new Error('--push requires -t/--tag or --output in passthrough arguments');
+  }
+
+  // Check for conflicting tag specifications
+  if (options.tag && hasOutputInPassthrough) {
+    // Check if passthrough output contains a name parameter
+    const outputWithName = options.passthroughArgs.some(arg => {
+      if (arg.startsWith('--output=')) {
+        return arg.includes('name=');
+      }
+      // Check next arg if current is --output
+      const outputIndex = options.passthroughArgs.indexOf('--output');
+      if (outputIndex !== -1 && outputIndex < options.passthroughArgs.length - 1) {
+        return options.passthroughArgs[outputIndex + 1].includes('name=');
+      }
+      return false;
+    });
+    
+    if (outputWithName) {
+      throw new Error('Cannot specify both -t/--tag and name= in passthrough --output');
+    }
+  }
+
+  // Check for conflicting push specifications
+  if (options.push && hasOutputInPassthrough) {
+    const outputWithPush = options.passthroughArgs.some(arg => {
+      if (arg.startsWith('--output=')) {
+        return arg.includes('push=');
+      }
+      const outputIndex = options.passthroughArgs.indexOf('--output');
+      if (outputIndex !== -1 && outputIndex < options.passthroughArgs.length - 1) {
+        return options.passthroughArgs[outputIndex + 1].includes('push=');
+      }
+      return false;
+    });
+    
+    if (outputWithPush) {
+      throw new Error('Cannot specify both --push and push= in passthrough --output');
+    }
+  }
+
   // Add output (tag) only if not overridden by passthrough
   if (!hasOutputInPassthrough) {
     if (options.tag) {
-      args.push('--output', `type=image,name=${options.tag},push=false`);
+      const pushValue = options.push ? 'true' : 'false';
+      args.push('--output', `type=image,name=${options.tag},push=${pushValue}`);
     } else {
       // Default to docker output if no tag specified
       args.push('--output', 'type=docker');
     }
   }
 
-  // Add passthrough arguments
+  // Add passthrough arguments, potentially modifying --output to merge push
   if (options.passthroughArgs.length > 0) {
-    args.push(...options.passthroughArgs);
+    const modifiedArgs = [...options.passthroughArgs];
+    
+    // If --push is specified and we have passthrough --output, merge push=true into it
+    if (options.push && hasOutputInPassthrough) {
+      for (let i = 0; i < modifiedArgs.length; i++) {
+        if (modifiedArgs[i] === '--output' && i + 1 < modifiedArgs.length) {
+          // --output value is in next argument
+          const outputValue = modifiedArgs[i + 1];
+          if (!outputValue.includes('push=')) {
+            modifiedArgs[i + 1] = outputValue + ',push=true';
+          }
+        } else if (modifiedArgs[i].startsWith('--output=')) {
+          // --output=value format
+          const outputValue = modifiedArgs[i].substring(9);
+          if (!outputValue.includes('push=')) {
+            modifiedArgs[i] = '--output=' + outputValue + ',push=true';
+          }
+        }
+      }
+    }
+    
+    args.push(...modifiedArgs);
   }
 
   return args;

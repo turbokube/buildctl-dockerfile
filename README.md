@@ -36,6 +36,7 @@ buildctl-dockerfile [OPTIONS] CONTEXT
 - `-f, --file DOCKERFILE` - Path to the Dockerfile (default: `Dockerfile` in context)
 - `--build-arg KEY=VALUE` - Set build arguments
 - `-t, --tag IMAGE` - Name and optionally tag for the built image
+- `--push` - Push the image to registry (requires `-t/--tag` or `--output` in passthrough)
 - `--dry-run` - Print the buildctl command that would be executed
 - `--` - Pass remaining arguments directly to buildctl
 
@@ -54,6 +55,9 @@ buildctl-dockerfile --build-arg NODE_VERSION=18 --build-arg ENV=production .
 # Build and tag the image
 buildctl-dockerfile -t myapp:latest .
 
+# Build, tag and push the image
+buildctl-dockerfile -t myregistry.com/myapp:latest --push .
+
 # See what buildctl command would be executed (dry run)
 buildctl-dockerfile --dry-run .
 
@@ -67,7 +71,10 @@ buildctl-dockerfile . -- --progress=plain --no-cache --export-cache type=local,d
 buildctl-dockerfile -t ignored:tag . -- --output type=registry,name=myregistry.com/image:latest,push=true
 ```
 
-**Note**: If `--output` is provided in passthrough arguments (after `--`), it will override any output configuration from the `-t/--tag` option.
+**Note**: If `--output` is provided in passthrough arguments (after `--`), it will override any output configuration from the `-t/--tag` option. The command validates for conflicting options:
+- Cannot use both `-t/--tag` and `name=` in passthrough `--output`
+- Cannot use both `--push` and `push=` in passthrough `--output`
+- `--push` requires either `-t/--tag` or `--output` in passthrough arguments
 
 The command translates these familiar options into the appropriate `buildctl build` syntax with the dockerfile frontend.
 
