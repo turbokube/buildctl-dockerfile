@@ -1,6 +1,6 @@
 {
   "name": "buildctl",
-  "version": "0.22.0-2",
+  "version": "0.22.0-3",
   "description": "CLI for BuildKit, a toolkit for converting source code to build artifacts",
   "homepage": "https://github.com/moby/buildkit",
   "repository": {
