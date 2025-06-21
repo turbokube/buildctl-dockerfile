@@ -1,0 +1,4 @@
+#!/bin/bash
+# Placeholder - will be replaced by postinstall script with symlink to platform-specific binary
+echo "buildctl binary not yet installed. Run 'npm install' to complete setup."
+exit 1

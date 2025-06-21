@@ -163,24 +163,17 @@ function createBinaryLink() {
       return;
     }
 
-    log(`Copying binary from ${sourceBinary} to ${binaryPath}...`);
-    fs.copyFileSync(sourceBinary, binaryPath);
-    log('Binary copied successfully');
+    log(`Creating symlink from ${binaryPath} to ${sourceBinary}...`);
+    fs.symlinkSync(sourceBinary, binaryPath);
+    log('Symlink created successfully');
 
-    // Make it executable on Unix-like systems
-    if (os.platform() !== 'win32') {
-      log('Setting executable permissions...');
-      fs.chmodSync(binaryPath, 0o755);
-      log('Executable permissions set');
-    } else {
-      log('Skipping permission setting on Windows');
-    }
+    // Verify the symlink
+    const finalStats = fs.lstatSync(binaryPath);
+    const targetPath = fs.readlinkSync(binaryPath);
+    log(`Symlink created: ${binaryPath} -> ${targetPath}`);
+    log(`Symlink stats: isSymbolicLink=${finalStats.isSymbolicLink()}`);
 
-    // Verify the final binary
-    const finalStats = fs.statSync(binaryPath);
-    log(`Final binary stats: size=${finalStats.size} bytes, mode=${finalStats.mode.toString(8)}`);
-
-    log(`✓ buildctl binary installed successfully for ${os.platform()}-${os.arch()}`);
+    log(`✓ buildctl binary linked successfully for ${os.platform()}-${os.arch()}`);
   } catch (error) {
     logError(`Could not install buildctl binary: ${error.message}`);
     logError(`Stack trace: ${error.stack}`);
