@@ -92,6 +92,21 @@ run_test "Passthrough Conflicts" \
     0 \
     "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --help"
 
+run_test "Passthrough Output Override" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --output type=registry,name=myregistry.com/image:latest,push=true" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=registry,name=myregistry.com/image:latest,push=true"
+
+run_test "Passthrough Output= Override" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --output=type=local,dest=/tmp/output" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output=type=local,dest=/tmp/output"
+
+run_test "Passthrough Override with Tag" \
+    "node bin/buildctl-dockerfile --dry-run -t myapp:latest /tmp/test-buildctl -- --output type=registry,name=override.com/image:v1,push=true" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=registry,name=override.com/image:v1,push=true"
+
 run_test "Error: No Context" \
     "node bin/buildctl-dockerfile --dry-run" \
     1

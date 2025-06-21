@@ -104,9 +104,38 @@ run_test "Passthrough Conflicts" \
     "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --help"
 ```
 
-### 8. Error Handling Tests
+### 8. Output Override Tests
 
-#### 8.1 No Context Path
+#### 8.1 Passthrough Output Override
+**Purpose**: Test that --output in passthrough overrides default output
+```bash
+run_test "Passthrough Output Override" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --output type=registry,name=myregistry.com/image:latest,push=true" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=registry,name=myregistry.com/image:latest,push=true"
+```
+
+#### 8.2 Passthrough Output= Override
+**Purpose**: Test that --output= syntax in passthrough works
+```bash
+run_test "Passthrough Output= Override" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --output=type=local,dest=/tmp/output" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output=type=local,dest=/tmp/output"
+```
+
+#### 8.3 Passthrough Override with Tag
+**Purpose**: Test that passthrough --output overrides even when -t tag is specified
+```bash
+run_test "Passthrough Override with Tag" \
+    "node bin/buildctl-dockerfile --dry-run -t myapp:latest /tmp/test-buildctl -- --output type=registry,name=override.com/image:v1,push=true" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=registry,name=override.com/image:v1,push=true"
+```
+
+### 9. Error Handling Tests
+
+#### 9.1 No Context Path
 **Purpose**: Verify error handling when context is missing
 ```bash
 run_test "Error: No Context" \
@@ -115,7 +144,7 @@ run_test "Error: No Context" \
 ```
 **Expected**: Error message "Context path is required" + help display, exit code 1
 
-#### 8.2 Non-existent Context Directory
+#### 9.2 Non-existent Context Directory
 **Purpose**: Verify error handling for invalid context path
 ```bash
 run_test "Error: Non-existent Context" \
@@ -124,7 +153,7 @@ run_test "Error: Non-existent Context" \
     "Error: Context path does not exist: /tmp/nonexistent"
 ```
 
-#### 8.3 Missing Dockerfile
+#### 9.3 Missing Dockerfile
 **Purpose**: Verify error handling when Dockerfile doesn't exist
 ```bash
 run_test "Error: Missing Dockerfile" \

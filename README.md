@@ -62,7 +62,12 @@ buildctl-dockerfile -f docker/Dockerfile -t myapp:v1.0 --build-arg VERSION=1.0 .
 
 # Pass additional buildctl options
 buildctl-dockerfile . -- --progress=plain --no-cache --export-cache type=local,dest=/tmp/cache
+
+# Override output destination (ignores -t flag if specified)
+buildctl-dockerfile -t ignored:tag . -- --output type=registry,name=myregistry.com/image:latest,push=true
 ```
+
+**Note**: If `--output` is provided in passthrough arguments (after `--`), it will override any output configuration from the `-t/--tag` option.
 
 The command translates these familiar options into the appropriate `buildctl build` syntax with the dockerfile frontend.
 

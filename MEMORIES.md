@@ -139,6 +139,7 @@ buildctl build --frontend dockerfile.v0 \
    - Arguments after `--` are passed directly to buildctl
    - Enables access to any buildctl option not directly supported
    - Handles argument separation correctly to avoid conflicts
+   - **Output override**: `--output` in passthrough args overrides wrapper-generated output
 
 #### Error Handling Strategy
 - Context path validation (existence check)
@@ -176,6 +177,9 @@ buildctl-dockerfile -t myapp:v1.0 .
 
 # Pass additional buildctl options
 buildctl-dockerfile . -- --progress=plain --no-cache
+
+# Override output destination
+buildctl-dockerfile -t ignored . -- --output type=registry,name=myregistry.com/image:latest,push=true
 
 # Dry run (testing)
 buildctl-dockerfile --dry-run .

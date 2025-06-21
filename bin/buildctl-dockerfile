@@ -70,6 +70,9 @@ EXAMPLES:
   # Pass additional buildctl options
   buildctl-dockerfile . -- --progress=plain --no-cache
 
+  # Override output with passthrough arguments
+  buildctl-dockerfile . -- --output type=registry,name=myregistry.com/image:latest,push=true
+
 This command translates familiar docker build options into buildctl build syntax.
 `);
 }
@@ -177,12 +180,19 @@ function buildBuildctlArgs(options) {
     args.push('--opt', `build-arg:${buildArg}`);
   }
 
-  // Add output (tag)
-  if (options.tag) {
-    args.push('--output', `type=image,name=${options.tag},push=false`);
-  } else {
-    // Default to docker output if no tag specified
-    args.push('--output', 'type=docker');
+  // Check if passthrough args contain --output
+  const hasOutputInPassthrough = options.passthroughArgs.some(arg =>
+    arg === '--output' || arg.startsWith('--output=')
+  );
+
+  // Add output (tag) only if not overridden by passthrough
+  if (!hasOutputInPassthrough) {
+    if (options.tag) {
+      args.push('--output', `type=image,name=${options.tag},push=false`);
+    } else {
+      // Default to docker output if no tag specified
+      args.push('--output', 'type=docker');
+    }
   }
 
   // Add passthrough arguments
