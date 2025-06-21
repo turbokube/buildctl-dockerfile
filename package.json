@@ -19,9 +19,7 @@
   },
   "files": [
     "bin/",
-    "scripts/postinstall.js",
-    "test-dockerfile.sh",
-    "TESTS.md"
+    "scripts/postinstall.js"
   ],
   "keywords": [
     "buildkit",
