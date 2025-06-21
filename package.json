@@ -5,7 +5,7 @@
   "homepage": "https://github.com/moby/buildkit",
   "repository": {
     "type": "git",
-    "url": "https://github.com/turbokube/buildctl-build.git"
+    "url": "https://github.com/turbokube/buildctl-dockerfile.git"
   },
   "license": "Apache-2.0",
   "bin": {

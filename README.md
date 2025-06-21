@@ -1,6 +1,18 @@
-# buildctl
+# buildctl with `docker build` syntax
 
-NPM package that redistributes the [buildctl](https://github.com/moby/buildkit) binary from the [BuildKit](https://github.com/moby/buildkit) project.
+You have three types of container image builds:
+
+- Language-specific like [ko](https://ko.build/) and [jib](https://github.com/GoogleContainerTools/jib).
+- Add files to a base image. Lots of tools can do that locally as layers are just tarballs. Use for example [contain](https://github.com/turbokube/contain).
+- One that needs to run commands in the base image. For that use [buildkit](https://github.com/moby/buildkit/).
+
+In the latter case, buildkit's client CLI [buildctl](https://github.com/moby/buildkit/?tab=readme-ov-file#building-a-dockerfile-with-buildctl) is great because it doesn't depend on any docker-ish platform.
+
+While BuildKit is a generic DAG runner we only ever care about it's ability to process Dockerfiles.
+
+## npm package
+
+This repo publishes the NPM package [buildctl](https://www.npmjs.com/package/buildctl) that redistributes the client binary from [BuildKit releases](https://github.com/moby/buildkit/releases).
 
 BuildKit is a toolkit for converting source code to build artifacts in an efficient, expressive and repeatable manner. `buildctl` is its command-line interface.
 
