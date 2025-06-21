@@ -16,41 +16,57 @@ echo "FROM alpine:latest" > /tmp/test-buildctl/custom.dockerfile
 mkdir -p /tmp/test-no-dockerfile
 ```
 
+## Test Runner Features
+
+The test runner script `test-dockerfile.sh` supports:
+- **Exit code validation**: Ensures commands exit with expected codes
+- **Exact output matching**: Validates dry-run commands produce exact buildctl output
+- **Error message validation**: Checks error scenarios return correct messages
+- **Automatic cleanup**: Sets up and tears down test environment
+
+### `run_test` Function Usage
+
+```bash
+run_test "Test Name" "command" [expected_exit_code] [expected_output]
+```
+
+- `expected_exit_code`: Default is 0 (success)
+- `expected_output`: Optional exact string match for command output
+
 ## Test Cases
 
 ### 1. Help Documentation Test
 **Purpose**: Verify help output is displayed correctly and includes all options
 ```bash
-node bin/buildctl-dockerfile --help
+run_test "Help Documentation" "node bin/buildctl-dockerfile --help"
 ```
 **Expected**: Should display complete help with all options including `--dry-run`
 
 ### 2. Basic Dry Run Test
 **Purpose**: Test basic functionality with default Dockerfile
 ```bash
-node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl
+run_test "Basic Dry Run" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker"
 ```
-**Expected Output**: 
-```
-buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker
-```
-
 ### 3. Build Arguments and Tag Test
 **Purpose**: Test build arguments and image tagging
 ```bash
-node bin/buildctl-dockerfile --dry-run --build-arg NODE_VERSION=18 --build-arg ENV=prod -t myapp:latest /tmp/test-buildctl
-```
-**Expected Output**:
-```
-buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --opt build-arg:NODE_VERSION=18 --opt build-arg:ENV=prod --output type=image,name=myapp:latest,push=false
+run_test "Build Args and Tag" \
+    "node bin/buildctl-dockerfile --dry-run --build-arg NODE_VERSION=18 --build-arg ENV=prod -t myapp:latest /tmp/test-buildctl" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --opt build-arg:NODE_VERSION=18 --opt build-arg:ENV=prod --output type=image,name=myapp:latest,push=false"
 ```
 
 ### 4. Custom Dockerfile Test
 **Purpose**: Test custom Dockerfile name handling
 ```bash
-node bin/buildctl-dockerfile --dry-run -f /tmp/test-buildctl/custom.dockerfile /tmp/test-buildctl
+run_test "Custom Dockerfile" \
+    "node bin/buildctl-dockerfile --dry-run -f /tmp/test-buildctl/custom.dockerfile /tmp/test-buildctl" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --opt filename=custom.dockerfile --output type=docker"
 ```
-**Expected Output**:
 ```
 buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --opt filename=custom.dockerfile --output type=docker
 ```
@@ -61,28 +77,31 @@ buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --loc
 node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --progress=plain --no-cache
 ```
 **Expected Output**:
-```
-buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --progress=plain --no-cache
+### 5. Passthrough Arguments Test
+**Purpose**: Test passthrough arguments with -- separator
+```bash
+run_test "Passthrough Arguments" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --progress=plain --no-cache" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --progress=plain --no-cache"
 ```
 
 ### 6. Complex Passthrough Test
 **Purpose**: Test passthrough with complex buildctl options
 ```bash
-node bin/buildctl-dockerfile --dry-run -t myapp:latest /tmp/test-buildctl -- --progress=plain --export-cache type=local,dest=/tmp/cache
-```
-**Expected Output**:
-```
-buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=image,name=myapp:latest,push=false --progress=plain --export-cache type=local,dest=/tmp/cache
+run_test "Complex Passthrough" \
+    "node bin/buildctl-dockerfile --dry-run -t myapp:latest /tmp/test-buildctl -- --progress=plain --export-cache type=local,dest=/tmp/cache" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=image,name=myapp:latest,push=false --progress=plain --export-cache type=local,dest=/tmp/cache"
 ```
 
 ### 7. Passthrough Conflicts Test
 **Purpose**: Test that -- properly separates conflicting arguments
 ```bash
-node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --help
-```
-**Expected Output**:
-```
-buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --help
+run_test "Passthrough Conflicts" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --help" \
+    0 \
+    "buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --help"
 ```
 
 ### 8. Error Handling Tests
@@ -90,18 +109,29 @@ buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --loc
 #### 8.1 No Context Path
 **Purpose**: Verify error handling when context is missing
 ```bash
-node bin/buildctl-dockerfile --dry-run
+run_test "Error: No Context" \
+    "node bin/buildctl-dockerfile --dry-run" \
+    1
 ```
 **Expected**: Error message "Context path is required" + help display, exit code 1
 
 #### 8.2 Non-existent Context Directory
 **Purpose**: Verify error handling for invalid context path
 ```bash
-node bin/buildctl-dockerfile --dry-run /tmp/nonexistent
+run_test "Error: Non-existent Context" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/nonexistent" \
+    1 \
+    "Error: Context path does not exist: /tmp/nonexistent"
 ```
-**Expected**: Error message "Context path does not exist: /tmp/nonexistent", exit code 1
 
 #### 8.3 Missing Dockerfile
+**Purpose**: Verify error handling when Dockerfile doesn't exist
+```bash
+run_test "Error: Missing Dockerfile" \
+    "node bin/buildctl-dockerfile --dry-run /tmp/test-no-dockerfile" \
+    1 \
+    "Error: Dockerfile not found: /tmp/test-no-dockerfile/Dockerfile"
+```
 **Purpose**: Verify error handling when Dockerfile doesn't exist
 ```bash
 node bin/buildctl-dockerfile --dry-run /tmp/test-no-dockerfile

@@ -149,8 +149,10 @@ buildctl build --frontend dockerfile.v0 \
 
 #### Testing Strategy
 - **Dry-run mode**: `--dry-run` flag shows buildctl command without execution
-- **Regression tests**: Documented in `TESTS.md`
+- **Regression tests**: Documented in `TESTS.md` with exact output matching
 - **Error case coverage**: Missing context, missing Dockerfile, invalid arguments
+- **Test automation**: `run_test` function supports exit code and exact output validation
+- **Manageable diffs**: Tests split into 3-4 line calls for better maintainability
 
 ### Files Modified/Created
 - `bin/buildctl-dockerfile`: Main implementation
