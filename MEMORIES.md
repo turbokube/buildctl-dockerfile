@@ -79,6 +79,129 @@ Runtime installation script for main package:
 - Copies binary to main package bin/ directory
 - Handles cross-platform compatibility
 
+## buildctl-dockerfile Implementation
+
+### Overview
+Added a Docker-compatible wrapper command `buildctl-dockerfile` (alias `buildctl-d`) that provides familiar `docker build` syntax for common buildctl operations.
+
+### Command Structure
+```bash
+buildctl-dockerfile [OPTIONS] CONTEXT
+```
+
+### Key Implementation Details
+
+#### Argument Parsing Strategy
+- Uses Node.js-based argument parser in `bin/buildctl-dockerfile`
+- Validates arguments before constructing buildctl command
+- Supports short and long option formats (`-f` / `--file`)
+- Handles multiple build arguments via repeated `--build-arg` flags
+- **NEW**: Supports `--` separator for passing additional arguments directly to buildctl
+
+#### buildctl Command Translation
+The wrapper translates Docker-style options to buildctl syntax:
+```bash
+# Docker-style input with passthrough:
+buildctl-dockerfile -f custom.dockerfile --build-arg KEY=VALUE -t image:tag ./context -- --progress=plain --no-cache
+
+# Translates to:
+buildctl build --frontend dockerfile.v0 \
+  --local context=./context \
+  --local dockerfile=./context \
+  --opt filename=custom.dockerfile \
+  --opt build-arg:KEY=VALUE \
+  --output type=image,name=image:tag,push=false \
+  --progress=plain --no-cache
+```
+
+#### Critical Implementation Points
+
+1. **Dockerfile Validation**: 
+   - Validates Dockerfile exists at specified path or default location
+   - Handles both absolute and relative paths for custom Dockerfiles
+   - Resolves paths relative to current working directory
+
+2. **Context Handling**:
+   - Context path is resolved to absolute path
+   - Dockerfile directory is extracted separately for `--local dockerfile=`
+   - Default Dockerfile location is `{context}/Dockerfile`
+
+3. **Build Arguments**:
+   - Format validated as `KEY=VALUE`
+   - Prefixed with `build-arg:` in buildctl command
+   - Multiple arguments supported
+
+4. **Output Handling**:
+   - With tag: `--output type=image,name={tag},push=false`
+   - Without tag: `--output type=docker` (default)
+
+5. **Passthrough Arguments**:
+   - Arguments after `--` are passed directly to buildctl
+   - Enables access to any buildctl option not directly supported
+   - Handles argument separation correctly to avoid conflicts
+   - **Output override**: `--output` in passthrough args overrides wrapper-generated output
+
+#### Error Handling Strategy
+- Context path validation (existence check)
+- Dockerfile existence validation
+- Build argument format validation
+- Clear error messages with help display on failure
+- Proper exit codes (0 for success, 1 for errors)
+
+#### Testing Strategy
+- **Dry-run mode**: `--dry-run` flag shows buildctl command without execution
+- **Regression tests**: Documented in `TESTS.md` with exact output matching
+- **Error case coverage**: Missing context, missing Dockerfile, invalid arguments
+- **Test automation**: `run_test` function supports exit code and exact output validation
+- **Manageable diffs**: Tests split into 3-4 line calls for better maintainability
+
+### Files Modified/Created
+- `bin/buildctl-dockerfile`: Main implementation
+- `package.json`: Already had bin entries for `buildctl-dockerfile` and `buildctl-d`
+- `README.md`: Added documentation with examples
+- `TESTS.md`: Comprehensive test suite for regression testing
+
+### Common Usage Patterns
+```bash
+# Basic usage
+buildctl-dockerfile .
+
+# With build args
+buildctl-dockerfile --build-arg NODE_VERSION=18 .
+
+# Custom Dockerfile
+buildctl-dockerfile -f prod.dockerfile .
+
+# With tagging
+buildctl-dockerfile -t myapp:v1.0 .
+
+# Pass additional buildctl options
+buildctl-dockerfile . -- --progress=plain --no-cache
+
+# Override output destination
+buildctl-dockerfile -t ignored . -- --output type=registry,name=myregistry.com/image:latest,push=true
+
+# Dry run (testing)
+buildctl-dockerfile --dry-run .
+```
+
+### Platform Compatibility
+- Works on all supported platforms (uses Node.js)
+- Resolves correct buildctl binary path using existing PLATFORMS mapping
+- Handles Windows `.exe` extension automatically
+
+### Future Enhancements Considered
+- Could add support for more Docker build options (--target, --cache-from, etc.)
+- Could add support for build contexts via URL/Git
+- Could add support for multi-platform builds
+- Currently focused on core Docker build compatibility
+
+### Debugging Notes
+- Use `--dry-run` to see exact buildctl command being generated
+- Check `TESTS.md` for comprehensive test cases
+- Argument parsing happens before buildctl validation
+- Error messages designed to be user-friendly while maintaining technical accuracy
+
 ## Version Management
 - Version is hardcoded in `scripts/publish.go`: `publishVersion = "0.22.0"`
 - All generated packages use this version

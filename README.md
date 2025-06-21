@@ -24,6 +24,60 @@ After installation, the `buildctl` command will be available:
 buildctl --help
 ```
 
+### buildctl-dockerfile Command
+
+This package also provides a `buildctl-dockerfile` command (aliased as `buildctl-d`) that offers a simplified interface similar to `docker build` for common Dockerfile-based builds:
+
+```bash
+buildctl-dockerfile [OPTIONS] CONTEXT
+```
+
+**Options:**
+- `-f, --file DOCKERFILE` - Path to the Dockerfile (default: `Dockerfile` in context)
+- `--build-arg KEY=VALUE` - Set build arguments
+- `-t, --tag IMAGE` - Name and optionally tag for the built image
+- `--push` - Push the image to registry (requires `-t/--tag` or `--output` in passthrough)
+- `--dry-run` - Print the buildctl command that would be executed
+- `--` - Pass remaining arguments directly to buildctl
+
+**Examples:**
+
+```bash
+# Build with default Dockerfile in current directory
+buildctl-dockerfile .
+
+# Build with custom Dockerfile
+buildctl-dockerfile -f custom.Dockerfile .
+
+# Build with build arguments
+buildctl-dockerfile --build-arg NODE_VERSION=18 --build-arg ENV=production .
+
+# Build and tag the image
+buildctl-dockerfile -t myapp:latest .
+
+# Build, tag and push the image
+buildctl-dockerfile -t myregistry.com/myapp:latest --push .
+
+# See what buildctl command would be executed (dry run)
+buildctl-dockerfile --dry-run .
+
+# Combine options
+buildctl-dockerfile -f docker/Dockerfile -t myapp:v1.0 --build-arg VERSION=1.0 ./src
+
+# Pass additional buildctl options
+buildctl-dockerfile . -- --progress=plain --no-cache --export-cache type=local,dest=/tmp/cache
+
+# Override output destination (ignores -t flag if specified)
+buildctl-dockerfile -t ignored:tag . -- --output type=registry,name=myregistry.com/image:latest,push=true
+```
+
+**Note**: If `--output` is provided in passthrough arguments (after `--`), it will override any output configuration from the `-t/--tag` option. The command validates for conflicting options:
+- Cannot use both `-t/--tag` and `name=` in passthrough `--output`
+- Cannot use both `--push` and `push=` in passthrough `--output`
+- `--push` requires either `-t/--tag` or `--output` in passthrough arguments
+
+The command translates these familiar options into the appropriate `buildctl build` syntax with the dockerfile frontend.
+
 ## Supported Platforms
 
 This package automatically installs the correct binary for your platform:
@@ -47,3 +101,13 @@ Package versions correspond to BuildKit releases. For example, version `0.22.0` 
 This package is licensed under Apache-2.0, same as BuildKit.
 
 The buildctl binary is built and distributed by the BuildKit project: https://github.com/moby/buildkit
+
+## Testing
+
+To run the regression test suite for the `buildctl-dockerfile` command:
+
+```bash
+./test-dockerfile.sh
+```
+
+See `TESTS.md` for detailed test documentation and manual test cases.
