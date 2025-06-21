@@ -106,12 +106,19 @@ function createBinaryLink() {
   log(`Script location: ${__dirname}`);
 
   const binDir = path.join(__dirname, '..', 'bin');
+  // For node_modules/.bin, we need to go up to the root node_modules directory
+  // When installed as dependency: scripts -> buildctl -> node_modules -> .bin
+  // When in development: scripts -> buildctl-dockerfile -> node_modules -> .bin
+  const nodeModulesBinDir = path.join(__dirname, '..', '..', '.bin');
   const binaryPath = path.join(binDir, 'buildctl');
+  const nodeModulesBinaryPath = path.join(nodeModulesBinDir, 'buildctl');
 
   log(`Target bin directory: ${binDir}`);
   log(`Target binary path: ${binaryPath}`);
+  log(`Node modules .bin directory: ${nodeModulesBinDir}`);
+  log(`Node modules binary path: ${nodeModulesBinaryPath}`);
 
-  // Create bin directory if it doesn't exist
+  // Create directories if they don't exist
   if (!fs.existsSync(binDir)) {
     log('Creating bin directory...');
     fs.mkdirSync(binDir, { recursive: true });
@@ -120,13 +127,23 @@ function createBinaryLink() {
     log('Bin directory already exists');
   }
 
-  // Remove existing binary if it exists
-  if (fs.existsSync(binaryPath)) {
-    log('Removing existing binary...');
-    fs.unlinkSync(binaryPath);
-    log('Existing binary removed');
+  if (!fs.existsSync(nodeModulesBinDir)) {
+    log('Creating node_modules/.bin directory...');
+    fs.mkdirSync(nodeModulesBinDir, { recursive: true });
+    log('Node modules .bin directory created successfully');
   } else {
-    log('No existing binary to remove');
+    log('Node modules .bin directory already exists');
+  }
+
+  // Remove existing binaries if they exist
+  for (const targetPath of [binaryPath, nodeModulesBinaryPath]) {
+    if (fs.existsSync(targetPath)) {
+      log(`Removing existing binary: ${targetPath}`);
+      fs.unlinkSync(targetPath);
+      log('Existing binary removed');
+    } else {
+      log(`No existing binary to remove: ${targetPath}`);
+    }
   }
 
   try {
@@ -163,17 +180,65 @@ function createBinaryLink() {
       return;
     }
 
-    log(`Creating symlink from ${binaryPath} to ${sourceBinary}...`);
-    fs.symlinkSync(sourceBinary, binaryPath);
-    log('Symlink created successfully');
+    // Create symlinks in both locations for all bin entries
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    
+    if (packageJson.bin) {
+      for (const [binName, binPath] of Object.entries(packageJson.bin)) {
+        const fullBinPath = path.join(__dirname, '..', binPath);
+        const nodeModulesBinPath = path.join(nodeModulesBinDir, binName);
+        
+        // For buildctl, link to the platform-specific binary
+        // For other bins (buildctl-dockerfile, buildctl-d), link to the local script
+        let linkTarget;
+        if (binName === 'buildctl') {
+          linkTarget = sourceBinary;
+        } else {
+          linkTarget = fullBinPath;
+        }
+        
+        log(`Processing ${binName}...`);
+        
+        // Create symlink in bin directory (if it's buildctl)
+        if (binName === 'buildctl') {
+          if (fs.existsSync(binaryPath)) {
+            log(`Removing existing binary: ${binaryPath}`);
+            fs.unlinkSync(binaryPath);
+          }
+          log(`Creating symlink from ${binaryPath} to ${linkTarget}...`);
+          fs.symlinkSync(linkTarget, binaryPath);
+          log('Symlink created successfully in bin directory');
+        }
+        
+        // Create symlink in node_modules/.bin directory
+        if (fs.existsSync(nodeModulesBinPath)) {
+          log(`Removing existing binary: ${nodeModulesBinPath}`);
+          fs.unlinkSync(nodeModulesBinPath);
+        }
+        log(`Creating symlink from ${nodeModulesBinPath} to ${linkTarget}...`);
+        fs.symlinkSync(linkTarget, nodeModulesBinPath);
+        log(`Symlink created successfully in node_modules/.bin directory for ${binName}`);
+      }
+    }
 
-    // Verify the symlink
-    const finalStats = fs.lstatSync(binaryPath);
-    const targetPath = fs.readlinkSync(binaryPath);
-    log(`Symlink created: ${binaryPath} -> ${targetPath}`);
-    log(`Symlink stats: isSymbolicLink=${finalStats.isSymbolicLink()}`);
+    // Verify the main buildctl symlinks
+    if (fs.existsSync(binaryPath)) {
+      const binStats = fs.lstatSync(binaryPath);
+      const binTargetPath = fs.readlinkSync(binaryPath);
+      log(`Symlink created: ${binaryPath} -> ${binTargetPath}`);
+      log(`Bin symlink stats: isSymbolicLink=${binStats.isSymbolicLink()}`);
+    }
 
-    log(`✓ buildctl binary linked successfully for ${os.platform()}-${os.arch()}`);
+    const nodeModulesBuildctlPath = path.join(nodeModulesBinDir, 'buildctl');
+    if (fs.existsSync(nodeModulesBuildctlPath)) {
+      const nodeModulesStats = fs.lstatSync(nodeModulesBuildctlPath);
+      const nodeModulesTargetPath = fs.readlinkSync(nodeModulesBuildctlPath);
+      log(`Symlink created: ${nodeModulesBuildctlPath} -> ${nodeModulesTargetPath}`);
+      log(`Node modules symlink stats: isSymbolicLink=${nodeModulesStats.isSymbolicLink()}`);
+    }
+
+    log(`✓ buildctl binaries linked successfully for ${os.platform()}-${os.arch()}`);
   } catch (error) {
     logError(`Could not install buildctl binary: ${error.message}`);
     logError(`Stack trace: ${error.stack}`);

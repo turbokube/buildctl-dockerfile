@@ -40,9 +40,9 @@ trap cleanup EXIT
 run_test() {
     local test_name="$1"
     local test_command="$2"
-    
+
     log_info "Running test: $test_name"
-    
+
     if eval "$test_command"; then
         log_success "✓ $test_name"
         return 0
@@ -55,18 +55,18 @@ run_test() {
 main() {
     log_info "Starting buildctl symlink regression test"
     log_info "Test directory: $TEST_DIR"
-    
+
     # Create test directory
     mkdir -p "$TEST_DIR"
     cd "$TEST_DIR"
-    
+
     # Step 1: Pack the current package
     log_info "Step 1: Creating package tarball..."
     cd /Users/solsson/turbokube/buildctl-dockerfile
     TARBALL=$(npm pack --silent)
     TARBALL_PATH="/Users/solsson/turbokube/buildctl-dockerfile/$TARBALL"
     log_info "Created tarball: $TARBALL_PATH"
-    
+
     # Step 2: Create test package.json
     log_info "Step 2: Creating test package..."
     cd "$TEST_DIR"
@@ -80,27 +80,27 @@ main() {
   }
 }
 EOF
-    
+
     # Replace placeholder with actual tarball path
     sed -i.bak "s|file:../buildctl-dockerfile/TARBALL_PLACEHOLDER|file:$TARBALL_PATH|" package.json
     rm package.json.bak
-    
+
     log_info "Test package.json created:"
     cat package.json
-    
+
     # Step 3: Install the package
     log_info "Step 3: Installing package..."
     log_info "Running: npm install"
     npm install 2>&1 | tee npm-install.log
     log_info "npm install completed. Checking if postinstall ran..."
-    
+
     if grep -q "buildctl-postinstall" npm-install.log; then
         log_success "✓ Postinstall script executed during npm install"
     else
         log_warning "⚠ Postinstall script did not run during npm install (expected for file-based installs)"
         log_info "Emulating postinstall execution (as would happen with published packages)..."
         node node_modules/buildctl/scripts/postinstall.js 2>&1 | tee emulated-postinstall.log
-        
+
         if [ $? -eq 0 ]; then
             log_success "✓ Postinstall script executed successfully"
         else
@@ -109,120 +109,165 @@ EOF
             return 1
         fi
     fi
-    
+
     # Step 4: Run tests
     log_info "Step 4: Running validation tests..."
-    
+
     TESTS_PASSED=0
     TESTS_TOTAL=0
-    
+
     # Test 1: Check if .bin directory exists
     ((TESTS_TOTAL++))
     run_test "node_modules/.bin directory exists" \
         "[ -d node_modules/.bin ]" && ((TESTS_PASSED++))
-    
-    # Test 2: Check if buildctl symlink exists in .bin (may not work in file-based test)
+
+    # Test 2: Check if buildctl symlink exists in .bin
     ((TESTS_TOTAL++))
     if [ -L node_modules/.bin/buildctl ]; then
         run_test "buildctl symlink exists in .bin" \
             "[ -L node_modules/.bin/buildctl ]" && ((TESTS_PASSED++))
     else
-        log_warning "buildctl symlink missing from .bin (expected for file-based installs)"
-        log_info "✓ This test passes for file-based installs (would work in published packages)"
-        ((TESTS_PASSED++))
+        log_warning "buildctl symlink missing from .bin"
+        log_info "Checking if postinstall script ran properly..."
+        if [ -L node_modules/buildctl/bin/buildctl ]; then
+            log_info "bin/buildctl symlink exists, but .bin symlink is missing"
+            log_info "This may indicate the postinstall script needs to run or there's a .bin creation issue"
+        fi
+        log_error "✗ buildctl symlink missing from .bin directory"
     fi
-    
+
     # Test 3: Check if buildctl-dockerfile symlink exists in .bin
     ((TESTS_TOTAL++))
-    run_test "buildctl-dockerfile symlink exists in .bin" \
-        "[ -L node_modules/.bin/buildctl-dockerfile ]" && ((TESTS_PASSED++))
-    
+    if [ -L node_modules/.bin/buildctl-dockerfile ]; then
+        run_test "buildctl-dockerfile symlink exists in .bin" \
+            "[ -L node_modules/.bin/buildctl-dockerfile ]" && ((TESTS_PASSED++))
+    else
+        log_error "✗ buildctl-dockerfile symlink missing from .bin directory"
+    fi
+
     # Test 4: Check if buildctl-d symlink exists in .bin
     ((TESTS_TOTAL++))
-    run_test "buildctl-d symlink exists in .bin" \
-        "[ -L node_modules/.bin/buildctl-d ]" && ((TESTS_PASSED++))
-    
+    if [ -L node_modules/.bin/buildctl-d ]; then
+        run_test "buildctl-d symlink exists in .bin" \
+            "[ -L node_modules/.bin/buildctl-d ]" && ((TESTS_PASSED++))
+    else
+        log_error "✗ buildctl-d symlink missing from .bin directory"
+    fi
+
     # Test 5: Check if bin/buildctl exists and is a symlink
     ((TESTS_TOTAL++))
     run_test "bin/buildctl exists and is a symlink" \
         "[ -L node_modules/buildctl/bin/buildctl ]" && ((TESTS_PASSED++))
-    
+
     # Test 6: Check if the symlink points to the right platform package
     ((TESTS_TOTAL++))
     if [ -L node_modules/.bin/buildctl ]; then
         TARGET=$(readlink node_modules/.bin/buildctl)
-        run_test "buildctl symlink points to platform-specific binary" \
+        run_test "buildctl .bin symlink points to platform-specific binary" \
             "echo '$TARGET' | grep -q 'buildctl.*bin/buildctl'" && ((TESTS_PASSED++))
     else
-        log_warning "Skipping .bin symlink target test (symlink doesn't exist in file-based install)"
-        # Test the bin/buildctl symlink instead
-        if [ -L node_modules/buildctl/bin/buildctl ]; then
-            TARGET=$(readlink node_modules/buildctl/bin/buildctl)
-            run_test "bin/buildctl symlink points to platform-specific binary" \
-                "echo '$TARGET' | grep -q 'buildctl.*bin/buildctl'" && ((TESTS_PASSED++))
-        else
-            log_error "✗ bin/buildctl symlink points to platform-specific binary (no symlink found)"
-        fi
+        log_error "✗ buildctl .bin symlink points to platform-specific binary (no .bin symlink found)"
     fi
-    
-    # Test 7: Check if buildctl binary is executable
+
+    # Also test the bin/buildctl symlink
+    ((TESTS_TOTAL++))
+    if [ -L node_modules/buildctl/bin/buildctl ]; then
+        TARGET=$(readlink node_modules/buildctl/bin/buildctl)
+        run_test "bin/buildctl symlink points to platform-specific binary" \
+            "echo '$TARGET' | grep -q 'buildctl.*bin/buildctl'" && ((TESTS_PASSED++))
+    else
+        log_error "✗ bin/buildctl symlink points to platform-specific binary (no bin symlink found)"
+    fi
+
+    # Test 8: Check if buildctl binary is executable
     ((TESTS_TOTAL++))
     if [ -L node_modules/.bin/buildctl ]; then
-        run_test "buildctl binary is executable" \
+        run_test "buildctl binary is executable via .bin" \
             "[ -x node_modules/.bin/buildctl ]" && ((TESTS_PASSED++))
     else
-        # Test the actual symlink target instead
-        run_test "buildctl binary is executable (via direct path)" \
-            "[ -x node_modules/buildctl/bin/buildctl ]" && ((TESTS_PASSED++))
+        log_error "✗ buildctl binary is executable via .bin (no .bin symlink found)"
     fi
-    
-    # Test 8: Test buildctl command execution
+
+    # Also test via bin path
+    ((TESTS_TOTAL++))
+    if [ -L node_modules/buildctl/bin/buildctl ]; then
+        run_test "buildctl binary is executable via bin path" \
+            "[ -x node_modules/buildctl/bin/buildctl ]" && ((TESTS_PASSED++))
+    else
+        log_error "✗ buildctl binary is executable via bin path (no bin symlink found)"
+    fi
+
+    # Test 10: Test buildctl command execution
     ((TESTS_TOTAL++))
     if [ -L node_modules/.bin/buildctl ]; then
-        run_test "buildctl command executes (shows help)" \
+        run_test "buildctl command executes via .bin (shows help)" \
             "node_modules/.bin/buildctl --help > /dev/null 2>&1" && ((TESTS_PASSED++))
     else
-        # Test via direct path
-        run_test "buildctl command executes (shows help via direct path)" \
-            "node_modules/buildctl/bin/buildctl --help > /dev/null 2>&1" && ((TESTS_PASSED++))
+        log_error "✗ buildctl command executes via .bin (no .bin symlink found)"
     fi
-    
-    # Test 9: Test buildctl-dockerfile command execution
+
+    # Also test via bin path
     ((TESTS_TOTAL++))
-    run_test "buildctl-dockerfile command executes (shows help)" \
-        "node_modules/.bin/buildctl-dockerfile --help > /dev/null 2>&1" && ((TESTS_PASSED++))
-    
-    # Test 10: Verify no file duplication (symlink vs copy)
+    if [ -L node_modules/buildctl/bin/buildctl ]; then
+        run_test "buildctl command executes via bin path (shows help)" \
+            "node_modules/buildctl/bin/buildctl --help > /dev/null 2>&1" && ((TESTS_PASSED++))
+    else
+        log_error "✗ buildctl command executes via bin path (no bin symlink found)"
+    fi
+
+    # Test 12: Test buildctl-dockerfile command execution
+    ((TESTS_TOTAL++))
+    if [ -L node_modules/.bin/buildctl-dockerfile ]; then
+        run_test "buildctl-dockerfile command executes (shows help)" \
+            "node_modules/.bin/buildctl-dockerfile --help > /dev/null 2>&1" && ((TESTS_PASSED++))
+    else
+        log_error "✗ buildctl-dockerfile command executes (no .bin symlink found)"
+    fi
+
+    # Test 13: Verify no file duplication (symlink vs copy)
     ((TESTS_TOTAL++))
     run_test "buildctl is symlinked, not copied (no duplication)" \
         "[ -L node_modules/buildctl/bin/buildctl ]" && ((TESTS_PASSED++))
-    
+
     # Step 5: Display detailed information
     log_info "Step 5: Detailed inspection..."
-    
+
     if [ -d node_modules/.bin ]; then
         log_info "Contents of node_modules/.bin:"
         ls -la node_modules/.bin/ | grep buildctl || log_warning "No buildctl entries in .bin"
+    else
+        log_warning "node_modules/.bin directory does not exist"
     fi
-    
+
     if [ -d node_modules/buildctl/bin ]; then
         log_info "Contents of node_modules/buildctl/bin:"
         ls -la node_modules/buildctl/bin/
+    else
+        log_warning "node_modules/buildctl/bin directory does not exist"
     fi
-    
+
     if [ -L node_modules/.bin/buildctl ]; then
-        log_info "buildctl symlink target:"
+        log_info "buildctl .bin symlink target:"
         readlink -f node_modules/.bin/buildctl
+    else
+        log_warning "node_modules/.bin/buildctl symlink does not exist"
     fi
-    
+
+    if [ -L node_modules/buildctl/bin/buildctl ]; then
+        log_info "buildctl bin symlink target:"
+        readlink -f node_modules/buildctl/bin/buildctl
+    else
+        log_warning "node_modules/buildctl/bin/buildctl symlink does not exist"
+    fi
+
     # Step 6: Show platform-specific packages installed
     log_info "Platform-specific packages installed:"
     find node_modules -name "buildctl-*" -type d | head -5
-    
+
     # Step 7: Test results summary
     log_info "Test Results Summary:"
     log_info "Tests passed: $TESTS_PASSED/$TESTS_TOTAL"
-    
+
     if [ $TESTS_PASSED -eq $TESTS_TOTAL ]; then
         log_success "🎉 All tests passed! Symlink approach is working correctly."
         return 0
