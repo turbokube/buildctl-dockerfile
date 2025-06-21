@@ -96,12 +96,13 @@ buildctl-dockerfile [OPTIONS] CONTEXT
 - Validates arguments before constructing buildctl command
 - Supports short and long option formats (`-f` / `--file`)
 - Handles multiple build arguments via repeated `--build-arg` flags
+- **NEW**: Supports `--` separator for passing additional arguments directly to buildctl
 
 #### buildctl Command Translation
 The wrapper translates Docker-style options to buildctl syntax:
 ```bash
-# Docker-style input:
-buildctl-dockerfile -f custom.dockerfile --build-arg KEY=VALUE -t image:tag ./context
+# Docker-style input with passthrough:
+buildctl-dockerfile -f custom.dockerfile --build-arg KEY=VALUE -t image:tag ./context -- --progress=plain --no-cache
 
 # Translates to:
 buildctl build --frontend dockerfile.v0 \
@@ -109,7 +110,8 @@ buildctl build --frontend dockerfile.v0 \
   --local dockerfile=./context \
   --opt filename=custom.dockerfile \
   --opt build-arg:KEY=VALUE \
-  --output type=image,name=image:tag,push=false
+  --output type=image,name=image:tag,push=false \
+  --progress=plain --no-cache
 ```
 
 #### Critical Implementation Points
@@ -132,6 +134,11 @@ buildctl build --frontend dockerfile.v0 \
 4. **Output Handling**:
    - With tag: `--output type=image,name={tag},push=false`
    - Without tag: `--output type=docker` (default)
+
+5. **Passthrough Arguments**:
+   - Arguments after `--` are passed directly to buildctl
+   - Enables access to any buildctl option not directly supported
+   - Handles argument separation correctly to avoid conflicts
 
 #### Error Handling Strategy
 - Context path validation (existence check)
@@ -164,6 +171,9 @@ buildctl-dockerfile -f prod.dockerfile .
 
 # With tagging
 buildctl-dockerfile -t myapp:v1.0 .
+
+# Pass additional buildctl options
+buildctl-dockerfile . -- --progress=plain --no-cache
 
 # Dry run (testing)
 buildctl-dockerfile --dry-run .

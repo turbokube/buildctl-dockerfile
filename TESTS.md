@@ -55,23 +55,53 @@ node bin/buildctl-dockerfile --dry-run -f /tmp/test-buildctl/custom.dockerfile /
 buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --opt filename=custom.dockerfile --output type=docker
 ```
 
-### 5. Error Handling Tests
+### 5. Passthrough Arguments Test
+**Purpose**: Test passthrough arguments with -- separator
+```bash
+node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --progress=plain --no-cache
+```
+**Expected Output**:
+```
+buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --progress=plain --no-cache
+```
 
-#### 5.1 No Context Path
+### 6. Complex Passthrough Test
+**Purpose**: Test passthrough with complex buildctl options
+```bash
+node bin/buildctl-dockerfile --dry-run -t myapp:latest /tmp/test-buildctl -- --progress=plain --export-cache type=local,dest=/tmp/cache
+```
+**Expected Output**:
+```
+buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=image,name=myapp:latest,push=false --progress=plain --export-cache type=local,dest=/tmp/cache
+```
+
+### 7. Passthrough Conflicts Test
+**Purpose**: Test that -- properly separates conflicting arguments
+```bash
+node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --help
+```
+**Expected Output**:
+```
+buildctl build --frontend dockerfile.v0 --local context=/tmp/test-buildctl --local dockerfile=/tmp/test-buildctl --output type=docker --help
+```
+
+### 8. Error Handling Tests
+
+#### 8.1 No Context Path
 **Purpose**: Verify error handling when context is missing
 ```bash
 node bin/buildctl-dockerfile --dry-run
 ```
 **Expected**: Error message "Context path is required" + help display, exit code 1
 
-#### 5.2 Non-existent Context Directory
+#### 8.2 Non-existent Context Directory
 **Purpose**: Verify error handling for invalid context path
 ```bash
 node bin/buildctl-dockerfile --dry-run /tmp/nonexistent
 ```
 **Expected**: Error message "Context path does not exist: /tmp/nonexistent", exit code 1
 
-#### 5.3 Missing Dockerfile
+#### 8.3 Missing Dockerfile
 **Purpose**: Verify error handling when Dockerfile doesn't exist
 ```bash
 node bin/buildctl-dockerfile --dry-run /tmp/test-no-dockerfile

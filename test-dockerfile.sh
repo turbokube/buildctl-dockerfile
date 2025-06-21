@@ -50,6 +50,12 @@ run_test "Build Args and Tag" "node bin/buildctl-dockerfile --dry-run --build-ar
 
 run_test "Custom Dockerfile" "node bin/buildctl-dockerfile --dry-run -f /tmp/test-buildctl/custom.dockerfile /tmp/test-buildctl"
 
+run_test "Passthrough Arguments" "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --progress=plain --no-cache"
+
+run_test "Complex Passthrough" "node bin/buildctl-dockerfile --dry-run -t myapp:latest /tmp/test-buildctl -- --progress=plain --export-cache type=local,dest=/tmp/cache"
+
+run_test "Passthrough Conflicts" "node bin/buildctl-dockerfile --dry-run /tmp/test-buildctl -- --help"
+
 run_test "Error: No Context" "node bin/buildctl-dockerfile --dry-run" 1
 
 run_test "Error: Non-existent Context" "node bin/buildctl-dockerfile --dry-run /tmp/nonexistent" 1

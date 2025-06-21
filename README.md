@@ -37,6 +37,7 @@ buildctl-dockerfile [OPTIONS] CONTEXT
 - `--build-arg KEY=VALUE` - Set build arguments
 - `-t, --tag IMAGE` - Name and optionally tag for the built image
 - `--dry-run` - Print the buildctl command that would be executed
+- `--` - Pass remaining arguments directly to buildctl
 
 **Examples:**
 
@@ -58,6 +59,9 @@ buildctl-dockerfile --dry-run .
 
 # Combine options
 buildctl-dockerfile -f docker/Dockerfile -t myapp:v1.0 --build-arg VERSION=1.0 ./src
+
+# Pass additional buildctl options
+buildctl-dockerfile . -- --progress=plain --no-cache --export-cache type=local,dest=/tmp/cache
 ```
 
 The command translates these familiar options into the appropriate `buildctl build` syntax with the dockerfile frontend.

@@ -46,6 +46,7 @@ OPTIONS:
   -t, --tag IMAGE          Name and optionally tag for the built image
   --dry-run                Print the buildctl command that would be executed
   -h, --help               Show this help message
+  --                       Pass remaining arguments directly to buildctl
 
 EXAMPLES:
   # Build with default Dockerfile in current directory
@@ -66,6 +67,9 @@ EXAMPLES:
   # Combine options
   buildctl-dockerfile -f docker/Dockerfile -t myapp:v1.0 --build-arg VERSION=1.0 ./src
 
+  # Pass additional buildctl options
+  buildctl-dockerfile . -- --progress=plain --no-cache
+
 This command translates familiar docker build options into buildctl build syntax.
 `);
 }
@@ -77,31 +81,41 @@ function parseArgs(args) {
     tag: null,
     context: null,
     help: false,
-    dryRun: false
+    dryRun: false,
+    passthroughArgs: []
   };
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
+  // Find the -- separator if it exists
+  const dashDashIndex = args.indexOf('--');
+  let mainArgs = args;
+
+  if (dashDashIndex !== -1) {
+    mainArgs = args.slice(0, dashDashIndex);
+    options.passthroughArgs = args.slice(dashDashIndex + 1);
+  }
+
+  for (let i = 0; i < mainArgs.length; i++) {
+    const arg = mainArgs[i];
     
     if (arg === '-h' || arg === '--help') {
       options.help = true;
     } else if (arg === '--dry-run') {
       options.dryRun = true;
     } else if (arg === '-f' || arg === '--file') {
-      if (i + 1 >= args.length) {
+      if (i + 1 >= mainArgs.length) {
         throw new Error(`Option ${arg} requires a value`);
       }
-      options.dockerfile = args[++i];
+      options.dockerfile = mainArgs[++i];
     } else if (arg === '--build-arg') {
-      if (i + 1 >= args.length) {
+      if (i + 1 >= mainArgs.length) {
         throw new Error(`Option ${arg} requires a value`);
       }
-      options.buildArgs.push(args[++i]);
+      options.buildArgs.push(mainArgs[++i]);
     } else if (arg === '-t' || arg === '--tag') {
-      if (i + 1 >= args.length) {
+      if (i + 1 >= mainArgs.length) {
         throw new Error(`Option ${arg} requires a value`);
       }
-      options.tag = args[++i];
+      options.tag = mainArgs[++i];
     } else if (!arg.startsWith('-')) {
       if (options.context) {
         throw new Error(`Multiple context paths specified: ${options.context} and ${arg}`);
@@ -169,6 +183,11 @@ function buildBuildctlArgs(options) {
   } else {
     // Default to docker output if no tag specified
     args.push('--output', 'type=docker');
+  }
+
+  // Add passthrough arguments
+  if (options.passthroughArgs.length > 0) {
+    args.push(...options.passthroughArgs);
   }
 
   return args;
